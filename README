@@ -1,0 +1,12 @@
+This repository contains the driver for the DWC-OTG USB host controller as
+used on the Raspberry Pi.
+
+The code within this repository originates from the rpi-3.10.y branch of the
+official version of the Linux kernel for the Raspberry Pi:
+
+  http://github.com/raspberrypi/linux/commits/rpi-3.10.y
+
+The master branch corresponds to the upstream version. Genode-specific
+modifications can be found at branches named "r<number>".
+
+The LICENSE file contains the information as found in the file headers.
