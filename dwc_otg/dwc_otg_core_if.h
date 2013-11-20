@@ -268,7 +268,7 @@ extern int dwc_otg_set_param_host_channels(dwc_otg_core_if_t * core_if,
 					   int32_t val);
 extern int32_t dwc_otg_get_param_host_channels(dwc_otg_core_if_t * core_if);
 //#define dwc_param_host_channels_default 12
-#define dwc_param_host_channels_default 8 // Broadcom BCM2708
+#define dwc_param_host_channels_default 2 // Broadcom BCM2708
 
 /** The number of endpoints in addition to EP0 available for device
  * mode operations.
