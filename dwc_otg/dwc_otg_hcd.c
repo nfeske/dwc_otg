@@ -47,6 +47,8 @@
 #include "dwc_otg_regs.h"
 #include "dwc_otg_fiq_fsm.h"
 
+#include "sof_trigger.h"
+
 extern bool microframe_schedule;
 extern uint16_t fiq_fsm_mask, nak_holdoff;
 
@@ -1972,8 +1974,14 @@ dwc_otg_transaction_type_e dwc_otg_hcd_select_transactions(dwc_otg_hcd_t * hcd)
 				uint16_t next_frame = dwc_frame_num_inc(qh->nak_frame, (qh->ep_type == UE_BULK) ? nak_holdoff : 8);
 				uint16_t frame = dwc_otg_hcd_get_frame_number(hcd);
 				if (dwc_frame_num_le(frame, next_frame)) {
-					if(dwc_frame_num_le(next_frame, hcd->fiq_state->next_sched_frame)) {
-						hcd->fiq_state->next_sched_frame = next_frame;
+
+					if (fiq_enable) {
+						if(dwc_frame_num_le(next_frame, hcd->fiq_state->next_sched_frame))
+							hcd->fiq_state->next_sched_frame = next_frame;
+
+					} else {
+						if(dwc_frame_num_le(next_frame, scheduled_sof_frame(hcd)))
+							schedule_sof_interrupt(hcd, next_frame);
 					}
 					qh_ptr = DWC_LIST_NEXT(qh_ptr);
 					continue;
@@ -2032,7 +2040,26 @@ dwc_otg_transaction_type_e dwc_otg_hcd_select_transactions(dwc_otg_hcd_t * hcd)
 				}
 			}
 		}
+	} else {
+
+		if (DWC_LIST_EMPTY(&hcd->non_periodic_sched_inactive)) {
+			kick_sof_interrupt(hcd, 0);
+		} else {
+			/* For each entry remaining in the NP inactive queue,
+			* if this a NAK'd retransmit then don't set the kick flag.
+			*/
+			if(nak_holdoff) {
+				DWC_LIST_FOREACH(qh_ptr, &hcd->non_periodic_sched_inactive) {
+					qh = DWC_LIST_ENTRY(qh_ptr, dwc_otg_qh_t, qh_list_entry);
+					if (qh->nak_frame == 0xFFFF) {
+						kick_sof_interrupt(hcd, 1);
+					}
+				}
+			}
+		}
 	}
+
+
 	if(!DWC_LIST_EMPTY(&hcd->periodic_sched_assigned))
 		ret_val |= DWC_OTG_TRANSACTION_PERIODIC;
 
@@ -2168,6 +2195,11 @@ static void process_periodic_channels(dwc_otg_hcd_t * hcd)
 		{
 			qh_ptr = qh_ptr->next;
 			hcd->fiq_state->next_sched_frame = dwc_otg_hcd_get_frame_number(hcd) | 7;
+			continue;
+		}
+
+		if(qh->do_split && ((dwc_otg_hcd_get_frame_number(hcd) + 1) & 7) > 6) {
+			schedule_sof_interrupt(hcd, dwc_otg_hcd_get_frame_number(hcd) | 7);
 			continue;
 		}
 

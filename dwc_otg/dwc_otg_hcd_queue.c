@@ -42,6 +42,8 @@
 #include "dwc_otg_hcd.h"
 #include "dwc_otg_regs.h"
 
+#include "sof_trigger.h"
+
 extern bool microframe_schedule;
 
 /**
@@ -638,7 +640,12 @@ static int schedule_periodic(dwc_otg_hcd_t * hcd, dwc_otg_qh_t * qh)
 		{
 			hcd->fiq_state->next_sched_frame = qh->sched_frame;
 
+		} else if (DWC_LIST_EMPTY(&hcd->periodic_sched_inactive)
+		       || dwc_frame_num_le(qh->sched_frame,
+		                           scheduled_sof_frame(hcd))) {
+			schedule_sof_interrupt(hcd, qh->sched_frame);
 		}
+
 		/* Always start in the inactive schedule. */
 		DWC_LIST_INSERT_TAIL(&hcd->periodic_sched_inactive, &qh->qh_list_entry);
 	}
@@ -833,6 +840,10 @@ void dwc_otg_hcd_qh_deactivate(dwc_otg_hcd_t * hcd, dwc_otg_qh_t * qh,
 				if(fiq_enable && !dwc_frame_num_le(hcd->fiq_state->next_sched_frame, qh->sched_frame))
 				{
 					hcd->fiq_state->next_sched_frame = qh->sched_frame;
+				} else if(!dwc_frame_num_le(scheduled_sof_frame(hcd),
+				                            qh->sched_frame))
+				{
+					schedule_sof_interrupt(hcd, qh->sched_frame);
 				}
 
 				DWC_LIST_MOVE_HEAD
@@ -926,6 +937,8 @@ int dwc_otg_hcd_qtd_add(dwc_otg_qtd_t * qtd,
 		} else {
 			if (fiq_enable)
 				hcd->fiq_state->kick_np_queues = 1;
+			else
+				kick_sof_interrupt(hcd, 1);
 		}
 	}
 	retval = dwc_otg_hcd_qh_add(hcd, *qh);
